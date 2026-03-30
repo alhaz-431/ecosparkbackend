@@ -25,7 +25,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/ideas', ideaRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/admin', adminRoutes);
-app.use('/api/ideas', voteRoutes);
+app.use('/api/votes', voteRoutes);
 
 
 
