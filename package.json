@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "postinstall": "prisma generate",
     "dev": "ts-node-dev --respawn src/server.ts",
-    "build": "prisma generate && tsc"
+    "build": "npx prisma generate && tsc",
+    "start": "node dist/server.js"
   },
   "keywords": [],
   "author": "",
