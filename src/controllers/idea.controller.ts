@@ -30,6 +30,42 @@ export const createIdea = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// export const getAllIdeas = async (req: Request, res: Response) => {
+//   try {
+//     const category = getString(req.query.category);
+//     const type = getString(req.query.type);
+//     const search = getString(req.query.search);
+//     const sort = getString(req.query.sort);
+//     const page = parseInt(getString(req.query.page) || '1', 10);
+//     const limit = 10;
+//     const skip = (page - 1) * limit;
+//     const where: any = { status: 'APPROVED' };
+//     if (category) where.categoryId = category;
+//     if (type) where.type = type;
+//     if (search) {
+//       where.OR = [
+//         { title: { contains: search, mode: 'insensitive' } },
+//         { description: { contains: search, mode: 'insensitive' } },
+//       ];
+//     }
+//     const orderBy: any = sort === 'top' ? { votes: { _count: 'desc' } } : { createdAt: 'desc' };
+//     const [ideas, total] = await Promise.all([
+//       prisma.idea.findMany({
+//         where, orderBy, skip, take: limit,
+//         include: {
+//           author: { select: { id: true, name: true } },
+//           category: true,
+//           votes: true,
+//         },
+//       }),
+//       prisma.idea.count({ where }),
+//     ]);
+//     res.json({ ideas, pagination: { total, page, totalPages: Math.ceil(total / limit) } });
+//   } catch (error) {
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// };
+
 export const getAllIdeas = async (req: Request, res: Response) => {
   try {
     const category = getString(req.query.category);
@@ -39,7 +75,10 @@ export const getAllIdeas = async (req: Request, res: Response) => {
     const page = parseInt(getString(req.query.page) || '1', 10);
     const limit = 10;
     const skip = (page - 1) * limit;
-    const where: any = { status: 'APPROVED' };
+
+    // শুরুতে সব স্ট্যাটাস দেখার জন্য status ফিল্টারটি কমেন্ট করে দেখতে পারেন
+    const where: any = {}; 
+    
     if (category) where.categoryId = category;
     if (type) where.type = type;
     if (search) {
@@ -48,10 +87,15 @@ export const getAllIdeas = async (req: Request, res: Response) => {
         { description: { contains: search, mode: 'insensitive' } },
       ];
     }
+
     const orderBy: any = sort === 'top' ? { votes: { _count: 'desc' } } : { createdAt: 'desc' };
+
     const [ideas, total] = await Promise.all([
       prisma.idea.findMany({
-        where, orderBy, skip, take: limit,
+        where, 
+        orderBy, 
+        skip, 
+        take: limit,
         include: {
           author: { select: { id: true, name: true } },
           category: true,
@@ -60,11 +104,15 @@ export const getAllIdeas = async (req: Request, res: Response) => {
       }),
       prisma.idea.count({ where }),
     ]);
+
     res.json({ ideas, pagination: { total, page, totalPages: Math.ceil(total / limit) } });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+  } catch (error: any) {
+    // এটি আপনাকে বলবে আসলে প্রিজমা কেন রিড করতে পারছে না
+    console.error("GET_ALL_IDEAS_ERROR:", error); 
+    res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
+
 
 export const getIdeaById = async (req: AuthRequest, res: Response) => {
   try {
