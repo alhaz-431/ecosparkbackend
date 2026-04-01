@@ -1,4 +1,3 @@
-
 import { Request, Response } from 'express';
 import prisma from '../prismaClient';
 import { AuthRequest } from '../middlewares/auth';
@@ -30,7 +29,6 @@ export const createIdea = async (req: AuthRequest, res: Response) => {
   }
 };
 
-
 export const getAllIdeas = async (req: Request, res: Response) => {
   try {
     const category = getString(req.query.category);
@@ -41,10 +39,16 @@ export const getAllIdeas = async (req: Request, res: Response) => {
     const limit = 10;
     const skip = (page - 1) * limit;
 
-    // শুরুতে সব স্ট্যাটাস দেখার জন্য status ফিল্টারটি কমেন্ট করে দেখতে পারেন
+    // শুধুমাত্র APPROVED আইডিয়াগুলো দেখাবে
     const where: any = { status: 'APPROVED' };
     
-    if (category) where.categoryId = category;
+    // ক্যাটাগরি আইডি'র বদলে নাম দিয়ে ফিল্টার করার জন্য এই পরিবর্তনটি করা হয়েছে
+    if (category) {
+      where.category = {
+        name: category 
+      };
+    }
+
     if (type) where.type = type;
     if (search) {
       where.OR = [
@@ -72,12 +76,10 @@ export const getAllIdeas = async (req: Request, res: Response) => {
 
     res.json({ ideas, pagination: { total, page, totalPages: Math.ceil(total / limit) } });
   } catch (error: any) {
-    // এটি আপনাকে বলবে আসলে প্রিজমা কেন রিড করতে পারছে না
     console.error("GET_ALL_IDEAS_ERROR:", error); 
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
-
 
 export const getIdeaById = async (req: AuthRequest, res: Response) => {
   try {
@@ -91,6 +93,7 @@ export const getIdeaById = async (req: AuthRequest, res: Response) => {
       },
     });
     if (!idea) return res.status(404).json({ message: 'Idea not found' });
+    
     if (idea.type === 'PAID' && req.user) {
       const payment = await prisma.payment.findFirst({
         where: { ideaId: id, userId: String(req.user.id) },
@@ -112,6 +115,7 @@ export const updateIdea = async (req: AuthRequest, res: Response) => {
     if (!idea) return res.status(404).json({ message: 'Idea not found' });
     if (idea.authorId !== String(req.user!.id)) return res.status(403).json({ message: 'Forbidden' });
     if (idea.status !== 'DRAFT') return res.status(400).json({ message: 'Only draft ideas can be edited' });
+    
     const { images, price, type, ...rest } = req.body;
     const updated = await prisma.idea.update({
       where: { id },
@@ -135,6 +139,7 @@ export const deleteIdea = async (req: AuthRequest, res: Response) => {
     if (!idea) return res.status(404).json({ message: 'Idea not found' });
     if (idea.authorId !== String(req.user!.id)) return res.status(403).json({ message: 'Forbidden' });
     if (idea.status !== 'DRAFT') return res.status(400).json({ message: 'Only draft ideas can be deleted' });
+    
     await prisma.idea.delete({ where: { id } });
     res.json({ message: 'Idea deleted successfully' });
   } catch (error) {
@@ -149,6 +154,7 @@ export const submitIdea = async (req: AuthRequest, res: Response) => {
     if (!idea) return res.status(404).json({ message: 'Idea not found' });
     if (idea.authorId !== String(req.user!.id)) return res.status(403).json({ message: 'Forbidden' });
     if (idea.status !== 'DRAFT') return res.status(400).json({ message: 'Only draft ideas can be submitted' });
+    
     const updated = await prisma.idea.update({
       where: { id },
       data: { status: 'UNDER_REVIEW' },
@@ -158,7 +164,6 @@ export const submitIdea = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 
 export const getMyIdeas = async (req: AuthRequest, res: Response) => {
   try {
