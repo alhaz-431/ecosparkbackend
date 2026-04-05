@@ -64,4 +64,3 @@ export const toggleUserStatus = async (req: Request, res: Response) => {
   }
 };
 
-
