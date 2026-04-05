@@ -28,21 +28,29 @@ export const createIdea = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 export const getAllIdeas = async (req: Request, res: Response) => {
   try {
     const category = getString(req.query.category);
     const type = getString(req.query.type);
     const search = getString(req.query.search);
     const sort = getString(req.query.sort);
+    const status = getString(req.query.status); // স্ট্যাটাস ফিল্টার যোগ করা হলো
     const page = parseInt(getString(req.query.page) || '1', 10);
     const limit = 10;
     const skip = (page - 1) * limit;
 
-    // শুধুমাত্র APPROVED আইডিয়াগুলো দেখাবে
-    const where: any = { status: 'APPROVED' };
+    // --- পরিবর্তন এখানে ---
+    // ডিফল্টভাবে সব দেখাবে, কিন্তু যদি কুয়েরিতে কিছু থাকে তবে সেটা ফিল্টার করবে
+    const where: any = {}; 
     
-    // ক্যাটাগরি আইডি'র বদলে নাম দিয়ে ফিল্টার করার জন্য এই পরিবর্তনটি করা হয়েছে
+    if (status) {
+      where.status = status;
+    } else {
+      // যদি আপনি চান ফ্রন্টএন্ডে ডিফল্টভাবে APPROVED এবং DRAFT দুইটাই দেখাবে
+      where.status = { in: ['APPROVED', 'DRAFT'] };
+    }
+    // ---------------------
+
     if (category) {
       where.category = {
         name: category 
