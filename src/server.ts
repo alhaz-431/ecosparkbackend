@@ -13,38 +13,32 @@ import voteRoutes from './routes/vote.routes';
 import paymentRoutes from './routes/payment.routes';
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
+// ১. টাইপস্ক্রিপ্ট এরর দূর করতে পোর্টকে নম্বর হিসেবে ডিফাইন করুন
+const PORT: number = Number(process.env.PORT) || 5000;
+
+// ২. CORS কনফিগারেশন (ভিডিওর জন্য আপাতত সব এলাউ করা হয়েছে)
+app.use(cors({
+  origin: '*', 
+  credentials: true
+}));
+
 app.use(express.json());
 
-// বেজ রাউট (চেক করার জন্য যে সার্ভার চলছে কি না)
+// বেজ রাউট
 app.get('/', (req, res) => {
   res.json({ message: 'EcoSpark Hub API is running! 🌱' });
 });
 
 // --- রাউট সেটআপ ---
-
-// ১. অথেনটিকেশন (Login, Register)
 app.use('/api/auth', authRoutes);
-
-// ২. অ্যাডমিন প্যানেল (Manage Users, Stats)
 app.use('/api/admin', adminRoutes);
-
-// ৩. ক্যাটাগরি সংক্রান্ত
 app.use('/api/categories', categoryRoutes);
-
-// ৪. আইডিয়া সংক্রান্ত (মূল লিস্ট এবং ডিটেইলস)
 app.use('/api/ideas', ideaRoutes);
-
-// ৫. ভোট সংক্রান্ত (আলাদা পাথ দিলে ম্যানেজ করা সহজ)
 app.use('/api/votes', voteRoutes);
-
-// ৬. পেমেন্ট সংক্রান্ত
 app.use('/api/payments', paymentRoutes);
 
-// সার্ভার লিসেনিং
-app.listen(PORT, () => {
+// ৩. সার্ভার লিসেনিং (রেন্ডারের জন্য '0.0.0.0' হোস্ট ব্যবহার করা হয়েছে)
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
