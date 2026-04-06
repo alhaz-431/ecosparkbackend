@@ -1,19 +1,20 @@
 {
   "name": "ecospark-server-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "dist/server.js",
+  "description": "EcoSpark Backend Server with Prisma and Stripe",
+  "main": "dist/index.js",
   "type": "commonjs",
   "engines": {
     "node": ">=20.0.0"
   },
   "scripts": {
-  "build": "prisma generate && tsc",
-  "start": "node dist/index.js",
-  "dev": "ts-node-dev --respawn --transient-config src/index.ts"
-},
+    "build": "prisma generate && tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transient-config src/index.ts",
+    "postinstall": "prisma generate"
+  },
   "keywords": [],
-  "author": "",
+  "author": "Ariful Islam",
   "license": "ISC",
   "dependencies": {
     "@prisma/adapter-pg": "^7.6.0",
