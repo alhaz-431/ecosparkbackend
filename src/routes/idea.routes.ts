@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { authenticate, optionalAuthenticate } from '../middlewares/auth';
-import { getIdeaBasicInfo } from '../controllers/idea.controller';
-import {
+import { 
   createIdea,
   getAllIdeas,
   getIdeaById,
@@ -9,12 +8,17 @@ import {
   deleteIdea,
   submitIdea,
   getMyIdeas,
+  getIdeaBasicInfo, 
+  getPurchasedIdeas // এখানে এটি নিশ্চিত করুন
 } from '../controllers/idea.controller';
 
 const router = Router();
 
+//--- গুরুত্বপূর্ণ: ডাইনামিক রাউটের (:id) আগে স্ট্যাটিক রাউটগুলো রাখতে হয় ---
 router.get('/', getAllIdeas);
 router.get('/my', authenticate, getMyIdeas);
+router.get('/purchased', authenticate, getPurchasedIdeas); // এখানে 'authenticate' ব্যবহার করুন
+
 router.get('/:id', optionalAuthenticate, getIdeaById);
 router.post('/', authenticate, createIdea);
 router.put('/:id', authenticate, updateIdea);

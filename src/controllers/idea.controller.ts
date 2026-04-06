@@ -217,3 +217,30 @@ export const getIdeaBasicInfo = async (req: Request, res: Response) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
+export const getPurchasedIdeas = async (req: AuthRequest, res: Response) => {
+  try {
+    // পেমেন্ট টেবিল থেকে বর্তমান ইউজারের সফল কেনাকাটাগুলো খুঁজে বের করা
+    const purchases = await prisma.payment.findMany({
+      where: { 
+        userId: String(req.user!.id),
+        status: "SUCCESS" 
+      },
+      include: {
+        idea: {
+          include: { 
+            category: true, 
+            author: { select: { name: true } } 
+          }
+        }
+      }
+    });
+
+    // শুধুমাত্র আইডিয়াগুলোর লিস্ট পাঠানো
+    const ideas = purchases.map(p => p.idea);
+    res.json(ideas);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
