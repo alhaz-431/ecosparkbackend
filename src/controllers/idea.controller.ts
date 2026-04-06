@@ -28,33 +28,27 @@ export const createIdea = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-export const getAllIdeas = async (req: Request, res: Response) => {
+
+export const getAllIdeas = async (req: AuthRequest, res: Response) => {
   try {
     const category = getString(req.query.category);
     const type = getString(req.query.type);
     const search = getString(req.query.search);
     const sort = getString(req.query.sort);
-    const status = getString(req.query.status); // স্ট্যাটাস ফিল্টার যোগ করা হলো
+    const status = getString(req.query.status);
     const page = parseInt(getString(req.query.page) || '1', 10);
     const limit = 10;
     const skip = (page - 1) * limit;
 
-    // --- পরিবর্তন এখানে ---
-    // ডিফল্টভাবে সব দেখাবে, কিন্তু যদি কুয়েরিতে কিছু থাকে তবে সেটা ফিল্টার করবে
     const where: any = {}; 
-    
     if (status) {
       where.status = status;
     } else {
-      // যদি আপনি চান ফ্রন্টএন্ডে ডিফল্টভাবে APPROVED এবং DRAFT দুইটাই দেখাবে
       where.status = { in: ['APPROVED', 'DRAFT'] };
     }
-    // ---------------------
 
     if (category) {
-      where.category = {
-        name: category 
-      };
+      where.category = { name: category };
     }
 
     if (type) where.type = type;
@@ -77,12 +71,26 @@ export const getAllIdeas = async (req: Request, res: Response) => {
           author: { select: { id: true, name: true } },
           category: true,
           votes: true,
+          payments: {
+            where: {
+              userId: req.user?.id ? String(req.user.id) : 'guest' 
+            }
+          }
         },
       }),
       prisma.idea.count({ where }),
     ]);
 
-    res.json({ ideas, pagination: { total, page, totalPages: Math.ceil(total / limit) } });
+    // ডাটা পাঠানোর আগে ফরম্যাট করে 'isPurchased' ফ্ল্যাগ সেট করা
+    const formattedIdeas = ideas.map((idea: any) => ({
+      ...idea,
+      isPurchased: idea.payments && idea.payments.length > 0
+    }));
+
+    res.json({ 
+      ideas: formattedIdeas, 
+      pagination: { total, page, totalPages: Math.ceil(total / limit) } 
+    });
   } catch (error: any) {
     console.error("GET_ALL_IDEAS_ERROR:", error); 
     res.status(500).json({ message: 'Server error', details: error.message });
