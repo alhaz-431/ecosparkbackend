@@ -218,29 +218,44 @@ export const getIdeaBasicInfo = async (req: Request, res: Response) => {
   }
 };
 
-
 export const getPurchasedIdeas = async (req: AuthRequest, res: Response) => {
   try {
-    // পেমেন্ট টেবিল থেকে বর্তমান ইউজারের সফল কেনাকাটাগুলো খুঁজে বের করা
+    // ইউজারের আইডিটি স্ট্রিং এ কনভার্ট করে নেওয়া হচ্ছে
+    const userId = String(req.user!.id);
+
+    // পেমেন্ট টেবিল থেকে সফল কেনাকাটাগুলো বের করা
     const purchases = await prisma.payment.findMany({
       where: { 
-        userId: String(req.user!.id),
-        status: "SUCCESS" 
+        userId: userId,
+        status: "SUCCESS" // আপনার ডাটাবেসে পেমেন্ট স্ট্যাটাস SUCCESS হতে হবে
       },
       include: {
         idea: {
           include: { 
             category: true, 
-            author: { select: { name: true } } 
+            author: { 
+              select: { 
+                id: true,
+                name: true 
+              } 
+            } 
           }
         }
+      },
+      orderBy: { 
+        createdAt: 'desc' 
       }
     });
 
-    // শুধুমাত্র আইডিয়াগুলোর লিস্ট পাঠানো
-    const ideas = purchases.map(p => p.idea);
-    res.json(ideas);
-  } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    // ফ্রন্টএন্ডে সরাসরি এই 'purchases' লিস্টটিই পাঠানো হচ্ছে
+    // এতে ফ্রন্টএন্ডে item.idea.id খুঁজে পাওয়া যাবে এবং Error আসবে না
+    res.json(purchases); 
+
+  } catch (error: any) {
+    console.error("GET_PURCHASED_IDEAS_ERROR:", error.message);
+    res.status(500).json({ 
+      message: 'Server error while fetching purchased ideas',
+      details: error.message 
+    });
   }
 };
