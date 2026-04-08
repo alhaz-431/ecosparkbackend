@@ -4,46 +4,50 @@ import prisma from '../prismaClient';
 import { AuthRequest } from '../middlewares/auth';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
-
 export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
   try {
-    const ideaId = String(req.params.id);
-    const userId = String(req.user!.id);
+    // ১. আইডি চেক করা (id যদি params এ না থাকে তবে body চেক করবে)
+    const ideaId = req.params.id || req.body.ideaId;
+    const userId = req.user?.id;
 
-    // ১. আপনার স্কিমা অনুযায়ী আইডিয়া খুঁজে বের করা
-    const idea = await prisma.idea.findUnique({ where: { id: ideaId } });
+    if (!ideaId) return res.status(400).json({ message: 'Idea ID is required' });
+    if (!userId) return res.status(401).json({ message: 'User not authenticated' });
 
-    if (!idea) return res.status(404).json({ message: 'Idea not found' });
+    const idea = await prisma.idea.findUnique({ where: { id: String(ideaId) } });
 
-    // ২. আপনার স্কিমা অনুযায়ী enum IdeaType চেক (FREE vs PAID)
+    if (!idea) {
+      console.log("Idea not found for ID:", ideaId);
+      return res.status(404).json({ message: 'Idea not found' });
+    }
+
     if (idea.type !== 'PAID') {
       return res.status(400).json({ message: 'This idea is free' });
     }
 
-    // ৩. ডাবল পেমেন্ট চেক করা
     const existingPayment = await prisma.payment.findFirst({
-      where: { ideaId, userId },
+      where: { ideaId: String(ideaId), userId: String(userId) },
     });
     if (existingPayment) return res.status(400).json({ message: 'Already purchased' });
 
-    // ৪. পেমেন্ট ইন্টেন্ট তৈরি
+    // ২. কারেন্সি এবং এমাউন্ট চেক (বাংলাদেশ থেকে হলে 'usd' এর বদলে 'bdt' ট্রাই করতে পারেন যদি স্ট্রাইপ সাপোর্ট করে)
     const amount = Math.round((idea.price || 0) * 100);
-    if (amount <= 0) return res.status(400).json({ message: 'Invalid price' });
+    
+    // এমাউন্ট কমপক্ষে ৫০ সেন্ট (বা সমপরিমাণ) হতে হয় স্ট্রাইপে
+    if (amount < 50) return res.status(400).json({ message: 'Price is too low for Stripe' });
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount,
-      currency: 'usd',
-      metadata: { ideaId, userId },
+      currency: 'usd', // অথবা আপনার স্ট্রাইপ একাউন্ট অনুযায়ী 'bdt'
+      metadata: { ideaId: String(ideaId), userId: String(userId) },
       automatic_payment_methods: { enabled: true },
     });
 
     res.json({ clientSecret: paymentIntent.client_secret });
   } catch (error: any) {
-    console.error("Payment Error:", error.message);
-    res.status(500).json({ message: 'Payment error', details: error.message });
+    console.error("Stripe API Error:", error.message); // এটি রেন্ডার লগে চেক করবেন
+    res.status(400).json({ message: error.message }); // সরাসরি এরর মেসেজ পাঠানো যাতে সমস্যা বোঝা যায়
   }
 };
-
 export const confirmPayment = async (req: AuthRequest, res: Response) => {
   try {
     const ideaId = String(req.params.id);
