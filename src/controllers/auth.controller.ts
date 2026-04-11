@@ -5,9 +5,9 @@ import prisma from '../prismaClient';
 
 export const register = async (req: Request, res: Response) => {
   try {
-    // এখানে role রিসিভ করা হচ্ছে
     const { name, email, password, role } = req.body;
 
+    // ১. সব ফিল্ড আছে কিনা চেক করা (এখানে role অবশ্যই 'MEMBER' অথবা 'ADMIN' হতে হবে)
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: 'All fields including role are required' });
     }
@@ -19,13 +19,13 @@ export const register = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ডাটাবেসে ইউজার তৈরির সময় role ও সেভ হবে
+    // ২. ডাটাবেসে ইউজার তৈরি (Prisma Schema অনুযায়ী role সেভ হবে)
     const user = await prisma.user.create({
       data: { 
         name, 
         email, 
         password: hashedPassword,
-        role: role // 'USER' অথবা 'ADMIN' সেভ হবে
+        role: role // এখানে 'MEMBER' অথবা 'ADMIN' আসবে
       },
     });
 
@@ -34,28 +34,27 @@ export const register = async (req: Request, res: Response) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error(error);
+    res.status(500).json({ message: 'Server error during registration' });
   }
 };
 
 export const login = async (req: Request, res: Response) => {
   try {
-    // ফ্রন্টএন্ড থেকে পাঠানো role রিসিভ করুন
     const { email, password, role } = req.body;
 
     if (!email || !password || !role) {
       return res.status(400).json({ message: 'Email, password and role are required' });
     }
 
-    // ডাটাবেসে ইমেইল এবং রোল—দুইটাই মিলিয়ে দেখা হচ্ছে
+    // ৩. ডাটাবেসে ইমেইল এবং রোল—দুইটাই মিলিয়ে দেখা হচ্ছে
     const user = await prisma.user.findFirst({ 
       where: { 
         email: email,
-        role: role 
+        role: role // ইউজার MEMBER হিসেবে লগইন করতে চাইলে ডাটাবেজেও MEMBER থাকতে হবে
       } 
     });
 
-    // যদি ঐ রোলের কোনো ইউজার না পাওয়া যায়
     if (!user) {
       return res.status(400).json({ 
         message: `No ${role.toLowerCase()} account found with this email.` 
@@ -67,6 +66,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
+    // ৪. টোকেন তৈরি
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET as string,
@@ -79,6 +79,7 @@ export const login = async (req: Request, res: Response) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error(error);
+    res.status(500).json({ message: 'Server error during login' });
   }
 };
