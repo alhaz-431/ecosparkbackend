@@ -7,6 +7,7 @@ const getString = (value: any): string | undefined => {
   return Array.isArray(value) ? String(value[0]) : String(value);
 };
 
+// ১. আইডিয়া তৈরি করা
 export const createIdea = async (req: AuthRequest, res: Response) => {
   try {
     const { title, problemStatement, solution, description, images, type, price, categoryId } = req.body;
@@ -29,6 +30,7 @@ export const createIdea = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// ২. সব আইডিয়া দেখা (পেমেন্ট স্ট্যাটাসসহ)
 export const getAllIdeas = async (req: AuthRequest, res: Response) => {
   try {
     const category = getString(req.query.category);
@@ -81,7 +83,6 @@ export const getAllIdeas = async (req: AuthRequest, res: Response) => {
       prisma.idea.count({ where }),
     ]);
 
-    // ডাটা পাঠানোর আগে ফরম্যাট করে 'isPurchased' ফ্ল্যাগ সেট করা
     const formattedIdeas = ideas.map((idea: any) => ({
       ...idea,
       isPurchased: idea.payments && idea.payments.length > 0
@@ -92,11 +93,46 @@ export const getAllIdeas = async (req: AuthRequest, res: Response) => {
       pagination: { total, page, totalPages: Math.ceil(total / limit) } 
     });
   } catch (error: any) {
-    console.error("GET_ALL_IDEAS_ERROR:", error); 
     res.status(500).json({ message: 'Server error', details: error.message });
   }
 };
 
+// ৩. আইডিয়া পারচেজ করা (এই ফাংশনটাই আপনার মিসিং ছিল)
+export const purchaseIdea = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = String(req.user!.id);
+
+    const idea = await prisma.idea.findUnique({ where: { id } });
+    if (!idea) return res.status(404).json({ message: 'Idea not found' });
+
+    // আগে কেনা আছে কি না চেক
+    const existingPayment = await prisma.payment.findFirst({
+      where: { ideaId: id, userId: userId }
+    });
+
+    if (existingPayment) {
+      return res.status(200).json({ message: 'Already purchased', payment: existingPayment });
+    }
+
+    // পেমেন্ট রেকর্ড তৈরি (transactionId সরিয়ে দেওয়া হয়েছে)
+    const payment = await prisma.payment.create({
+      data: {
+        ideaId: id,
+        userId: userId,
+        amount: idea.price || 0,
+        status: 'SUCCESS', 
+      }
+    });
+
+    res.status(201).json({ message: 'Purchase successful', payment });
+  } catch (error: any) {
+    console.error("PURCHASE_ERROR:", error);
+    res.status(500).json({ message: 'Payment failed', details: error.message });
+  }
+};
+
+// ৪. আইডিয়া ডিটেইলস দেখা (পেমেন্ট চেকসহ)
 export const getIdeaById = async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -108,14 +144,22 @@ export const getIdeaById = async (req: AuthRequest, res: Response) => {
         votes: true,
       },
     });
+
     if (!idea) return res.status(404).json({ message: 'Idea not found' });
     
-    if (idea.type === 'PAID' && req.user) {
-      const payment = await prisma.payment.findFirst({
-        where: { ideaId: id, userId: String(req.user.id) },
-      });
-      if (!payment && idea.authorId !== String(req.user.id)) {
-        return res.status(403).json({ message: 'Purchase required to view this idea' });
+    // যদি পেইড আইডিয়া হয়
+    if (idea.type === 'PAID') {
+      const userId = req.user ? String(req.user.id) : null;
+      
+      // যদি লেখক নিজে না হয়, তবে পেমেন্ট চেক হবে
+      if (idea.authorId !== userId) {
+        const payment = await prisma.payment.findFirst({
+          where: { ideaId: id, userId: userId || 'guest' },
+        });
+
+        if (!payment) {
+          return res.status(403).json({ message: 'Purchase required to view this idea' });
+        }
       }
     }
     res.json(idea);
