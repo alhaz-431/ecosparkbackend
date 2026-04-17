@@ -4,7 +4,8 @@ import { authenticate } from '../middlewares/auth';
 
 const router = Router();
 
-router.post('/:id/payment-intent', authenticate, createPaymentIntent);
-router.post('/:id/confirm-payment', authenticate, confirmPayment);
+// এখানে আইডি বের করে দিয়েছি যাতে ফ্রন্টএন্ডের ইউআরএল এর সাথে মিলে যায়
+router.post('/create-intent', authenticate, createPaymentIntent);
+router.post('/confirm-payment', authenticate, confirmPayment);
 
 export default router;

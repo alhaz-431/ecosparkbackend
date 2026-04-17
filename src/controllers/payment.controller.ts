@@ -7,36 +7,34 @@ import { AuthRequest } from '../middlewares/auth';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 /**
- * ১. পেমেন্ট ইন্টেন্ট তৈরি করা
+ * ১. পেমেন্ট ইন্টেন্ট তৈরি করা (সংশোধিত)
  */
 export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
   try {
-    const ideaId = req.params.id;
+    // আইডিটি বডি অথবা প্যারামস থেকে নেওয়া (নিরাপত্তার জন্য দুইটাই চেক করছি)
+    const ideaId = req.params.id || req.body.ideaId;
     const userId = req.user?.id;
 
-    // প্রাথমিক ভ্যালিডেশন
     if (!ideaId || ideaId === 'undefined') {
-      return res.status(400).json({ message: 'Valid Idea ID is required' });
+      return res.status(400).json({ message: 'সঠিক আইডিয়া আইডি প্রয়োজন' });
     }
     if (!userId) {
-      return res.status(401).json({ message: 'Please login to purchase' });
+      return res.status(401).json({ message: 'দয়া করে লগইন করুন' });
     }
 
-    // ডাটাবেস থেকে আইডিয়া খুঁজে বের করা
     const idea = await prisma.idea.findUnique({ 
       where: { id: String(ideaId) } 
     });
 
     if (!idea) {
-      return res.status(404).json({ message: 'Idea not found' });
+      return res.status(404).json({ message: 'আইডিয়াটি খুঁজে পাওয়া যায়নি' });
     }
 
-    // আইডিয়াটি পেইড কি না চেক করা
     if (idea.type !== 'PAID') {
-      return res.status(400).json({ message: 'This is a free idea' });
+      return res.status(400).json({ message: 'এটি একটি ফ্রি আইডিয়া, পেমেন্টের প্রয়োজন নেই' });
     }
 
-    // ইউজার কি অলরেডি কিনেছে?
+    // আগের পেমেন্ট চেক
     const existingPayment = await prisma.payment.findFirst({
       where: { 
         ideaId: String(ideaId), 
@@ -46,24 +44,22 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
     });
 
     if (existingPayment) {
-      return res.status(400).json({ message: 'You have already purchased this idea' });
+      return res.status(400).json({ message: 'আপনি এই আইডিয়াটি আগেই কিনেছেন' });
     }
 
-    // এমাউন্ট ক্যালকুলেশন (Stripe এ পয়সা হিসেবে পাঠাতে হয়)
     const price = idea.price || 0;
     const amount = Math.round(price * 100); 
     
-    // মিনিমাম এমাউন্ট চেক (Stripe minimum is 50 cents)
+    // Stripe Minimum Charge ফিক্স
     if (amount < 50) {
       return res.status(400).json({ 
-        message: 'The price is too low for online payment. Minimum 60 BDT required.' 
+        message: 'পেমেন্টের জন্য নুন্যতম ৬০ টাকা (বা ৫০ সেন্ট) দাম হতে হবে।' 
       });
     }
 
-    // Stripe পেমেন্ট ইন্টেন্ট তৈরি
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount,
-      currency: 'usd', // অথবা আপনার সাপোর্ট অনুযায়ী 'bdt'
+      currency: 'usd', 
       metadata: { 
         ideaId: String(ideaId), 
         userId: String(userId) 
@@ -78,35 +74,34 @@ export const createPaymentIntent = async (req: AuthRequest, res: Response) => {
 
   } catch (error: any) {
     console.error("Stripe Intent Error:", error.message);
-    res.status(500).json({ message: 'Failed to initialize payment', details: error.message });
+    res.status(500).json({ message: 'পেমেন্ট শুরু করতে সমস্যা হয়েছে', details: error.message });
   }
 };
 
 /**
- * ২. পেমেন্ট কনফার্ম করা এবং ডাটাবেসে সেভ করা
+ * ২. পেমেন্ট কনফার্ম করা (সংশোধিত)
  */
 export const confirmPayment = async (req: AuthRequest, res: Response) => {
   try {
-    const ideaId = req.params.id;
+    const ideaId = req.params.id || req.body.ideaId;
     const userId = req.user?.id;
     const { paymentIntentId } = req.body;
 
     if (!paymentIntentId) {
-      return res.status(400).json({ message: 'Payment Intent ID is missing' });
+      return res.status(400).json({ message: 'পেমেন্ট আইডি পাওয়া যায়নি' });
     }
 
-    // ১. স্ট্রাইপ থেকে পেমেন্ট স্ট্যাটাস রিট্রিভ করা
+    // স্ট্রাইপ থেকে তথ্য আনা
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
 
     if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ message: 'Payment has not been completed successfully' });
+      return res.status(400).json({ message: 'পেমেন্টটি এখনো সফল হয়নি' });
     }
 
-    // ২. আইডিয়াটির অস্তিত্ব চেক করা
     const idea = await prisma.idea.findUnique({ where: { id: String(ideaId) } });
-    if (!idea) return res.status(404).json({ message: 'Idea not found' });
+    if (!idea) return res.status(404).json({ message: 'আইডিয়াটি পাওয়া যায়নি' });
 
-    // ৩. ডাটাবেসে পেমেন্ট রেকর্ড তৈরি করা (Transaction ব্যবহার করা ভালো)
+    // ডাটাবেসে পেমেন্ট সেভ করা
     const payment = await prisma.payment.create({
       data: {
         userId: String(userId),
@@ -118,12 +113,12 @@ export const confirmPayment = async (req: AuthRequest, res: Response) => {
 
     res.json({ 
       success: true, 
-      message: 'Payment verified and idea unlocked!', 
+      message: 'পেমেন্ট সফল হয়েছে এবং আইডিয়াটি আনলক হয়েছে!', 
       payment 
     });
 
   } catch (error: any) {
     console.error("Payment Confirmation Error:", error.message);
-    res.status(500).json({ message: 'Verification failed', details: error.message });
+    res.status(500).json({ message: 'ভেরিফিকেশন ব্যর্থ হয়েছে', details: error.message });
   }
 };
