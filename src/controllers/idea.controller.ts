@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prismaClient';
 import { AuthRequest } from '../middlewares/auth';
 
-// হেল্পার ফাংশন: কুয়েরি প্যারামস থেকে স্ট্রিং বের করার জন্য
+// হেল্পার ফাংশন: কুয়েরি প্যারামস থেকে স্ট্রিং বের করার জন্য
 const getString = (value: any): string | undefined => {
   if (!value) return undefined;
   return Array.isArray(value) ? String(value[0]) : String(value);
@@ -31,14 +31,14 @@ export const createIdea = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    res.status(201).json({ message: 'আইডিয়াটি সফলভাবে তৈরি হয়েছে', idea });
+    res.status(201).json({ message: 'আইডিয়াটি সফলভাবে তৈরি হয়েছে', idea });
   } catch (error) {
     console.error("CREATE_ERROR:", error);
-    res.status(500).json({ message: 'সার্ভারে সমস্যা হয়েছে' });
+    res.status(500).json({ message: 'সার্ভারে সমস্যা হয়েছে' });
   }
 };
 
-// ২. সব আইডিয়া দেখা (পেমেন্ট স্ট্যাটাসসহ ফিল্টারিং)
+// ২. সব আইডিয়া দেখা (পেমেন্ট স্ট্যাটাসসহ ফিল্টারিং) - ফিক্সড ফর ভোট কাউন্ট
 export const getAllIdeas = async (req: AuthRequest, res: Response) => {
   try {
     const category = getString(req.query.category);
@@ -54,7 +54,7 @@ export const getAllIdeas = async (req: AuthRequest, res: Response) => {
     if (status) {
       where.status = status;
     } else {
-      where.status = { in: ['APPROVED', 'DRAFT'] };
+      where.status = { in: ['APPROVED', 'DRAFT', 'UNDER_REVIEW', 'PENDING'] }; // সব স্ট্যাটাস ইনক্লুড করা হলো যাতে এডমিন সব দেখতে পায়
     }
 
     if (category) where.category = { name: category };
@@ -78,7 +78,7 @@ export const getAllIdeas = async (req: AuthRequest, res: Response) => {
         include: {
           author: { select: { id: true, name: true } },
           category: true,
-          votes: true,
+          votes: true, // সব ভোট নিয়ে আসা হচ্ছে লজিক্যালি কাউন্ট করার জন্য
           payments: {
             where: { userId: req.user?.id ? String(req.user.id) : 'guest' }
           }
@@ -87,11 +87,19 @@ export const getAllIdeas = async (req: AuthRequest, res: Response) => {
       prisma.idea.count({ where }),
     ]);
 
-    const formattedIdeas = ideas.map((idea: any) => ({
-      ...idea,
-      isPaid: idea.type === 'PAID',
-      isPurchased: (idea.payments && idea.payments.length > 0)
-    }));
+    const formattedIdeas = ideas.map((idea: any) => {
+      // ভোট গণনা: value 1 হলে upvote, -1 হলে downvote
+      const upvotes = idea.votes.filter((v: any) => v.value > 0).length;
+      const downvotes = idea.votes.filter((v: any) => v.value < 0).length;
+
+      return {
+        ...idea,
+        upvotes, // এডমিন প্যানেল এখন এই ভ্যালু পাবে
+        downvotes, // এডমিন প্যানেল এখন এই ভ্যালু পাবে
+        isPaid: idea.type === 'PAID',
+        isPurchased: (idea.payments && idea.payments.length > 0)
+      };
+    });
 
     res.json({ 
       ideas: formattedIdeas, 
@@ -102,13 +110,13 @@ export const getAllIdeas = async (req: AuthRequest, res: Response) => {
   }
 };
 
-// ৩. সিঙ্গেল আইডিয়া ডিটেইলস (পেমেন্ট সিকিউরিটিসহ)
+// ৩. সিঙ্গেল আইডিয়া ডিটেইলস - ফিক্সড ফর ভোট কাউন্ট
 export const getIdeaById = async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
     const userId = req.user ? String(req.user.id) : null;
 
-    const idea = await prisma.idea.findUnique({
+    const idea: any = await prisma.idea.findUnique({
       where: { id },
       include: {
         author: { select: { id: true, name: true } },
@@ -117,7 +125,10 @@ export const getIdeaById = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    if (!idea) return res.status(404).json({ message: 'আইডিয়াটি খুঁজে পাওয়া যায়নি' });
+    if (!idea) return res.status(404).json({ message: 'আইডিয়াটি খুঁজে পাওয়া যায়নি' });
+
+    const upvotes = idea.votes.filter((v: any) => v.value > 0).length;
+    const downvotes = idea.votes.filter((v: any) => v.value < 0).length;
 
     const payment = await prisma.payment.findFirst({
       where: { ideaId: id, userId: userId || 'guest', status: 'SUCCESS' }
@@ -128,6 +139,8 @@ export const getIdeaById = async (req: AuthRequest, res: Response) => {
 
     res.json({
       ...idea,
+      upvotes,
+      downvotes,
       isPaid: idea.type === 'PAID',
       hasAccess: hasAccess,
       purchasedBy: payment ? [userId] : [] 
@@ -163,7 +176,7 @@ export const purchaseIdea = async (req: AuthRequest, res: Response) => {
       }
     });
 
-    res.status(201).json({ message: 'পেমেন্ট সফল হয়েছে', payment });
+    res.status(201).json({ message: 'পেমেন্ট সফল হয়েছে', payment });
   } catch (error: any) {
     res.status(500).json({ message: 'পেমেন্ট ফেইল করেছে', details: error.message });
   }
@@ -176,7 +189,7 @@ export const updateIdea = async (req: AuthRequest, res: Response) => {
     const idea = await prisma.idea.findUnique({ where: { id } });
     
     if (!idea) return res.status(404).json({ message: 'Idea not found' });
-    if (idea.authorId !== String(req.user!.id)) return res.status(403).json({ message: 'আপনি এই আইডিয়াটি এডিট করতে পারবেন না' });
+    if (idea.authorId !== String(req.user!.id)) return res.status(403).json({ message: 'আপনি এই আইডিয়াটি এডিট করতে পারবেন না' });
     
     const { images, price, type, ...rest } = req.body;
     const updated = await prisma.idea.update({
@@ -188,7 +201,7 @@ export const updateIdea = async (req: AuthRequest, res: Response) => {
         type: type || idea.type,
       },
     });
-    res.json({ message: 'আইডিয়া আপডেট হয়েছে', idea: updated });
+    res.json({ message: 'আইডিয়া আপডেট হয়েছে', idea: updated });
   } catch (error) {
     res.status(500).json({ message: 'সার্ভার এরর' });
   }
@@ -204,9 +217,9 @@ export const deleteIdea = async (req: AuthRequest, res: Response) => {
     if (idea.authorId !== String(req.user!.id)) return res.status(403).json({ message: 'Forbidden' });
     
     await prisma.idea.delete({ where: { id } });
-    res.json({ message: 'আইডিয়াটি ডিলিট করা হয়েছে' });
+    res.json({ message: 'আইডিয়াটি ডিলিট করা হয়েছে' });
   } catch (error) {
-    res.status(500).json({ message: 'ডিলিট করতে সমস্যা হয়েছে' });
+    res.status(500).json({ message: 'ডিলিট করতে সমস্যা হয়েছে' });
   }
 };
 
@@ -223,13 +236,13 @@ export const submitIdea = async (req: AuthRequest, res: Response) => {
       where: { id },
       data: { status: 'UNDER_REVIEW' },
     });
-    res.json({ message: 'রিভিউর জন্য পাঠানো হয়েছে', idea: updated });
+    res.json({ message: 'রিভিউর জন্য পাঠানো হয়েছে', idea: updated });
   } catch (error) {
     res.status(500).json({ message: 'সাবমিট ফেইল করেছে' });
   }
 };
 
-// ৮. নিজের আইডিয়াগুলো দেখা
+// ৮. নিজের আইডিয়াগুলো দেখা - ফিক্সড ফর ভোট কাউন্ট
 export const getMyIdeas = async (req: AuthRequest, res: Response) => {
   try {
     const ideas = await prisma.idea.findMany({
@@ -237,13 +250,20 @@ export const getMyIdeas = async (req: AuthRequest, res: Response) => {
       include: { category: true, votes: true },
       orderBy: { createdAt: 'desc' },
     });
-    res.json(ideas);
+    
+    const formattedIdeas = ideas.map((idea: any) => ({
+      ...idea,
+      upvotes: idea.votes.filter((v: any) => v.value > 0).length,
+      downvotes: idea.votes.filter((v: any) => v.value < 0).length,
+    }));
+
+    res.json(formattedIdeas);
   } catch (error) {
     res.status(500).json({ message: 'সার্ভার এরর' });
   }
 };
 
-// ৯. কেনা আইডিয়াগুলো দেখা
+// ৯. কেনা আইডিয়াগুলো দেখা
 export const getPurchasedIdeas = async (req: AuthRequest, res: Response) => {
   try {
     const userId = String(req.user!.id);
