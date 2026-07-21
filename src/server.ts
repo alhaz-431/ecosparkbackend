@@ -11,7 +11,7 @@ import categoryRoutes from './routes/category.routes';
 import adminRoutes from './routes/admin.routes';
 import voteRoutes from './routes/vote.routes';
 import paymentRoutes from './routes/payment.routes';
-
+import contactRoutes from './routes/contact.routes';
 const app = express();
 
 
@@ -37,7 +37,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/ideas', ideaRoutes);
 app.use('/api/votes', voteRoutes);
 app.use('/api/payments', paymentRoutes);
-
+app.use('/api/contact', contactRoutes);
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
