@@ -3,11 +3,22 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../prismaClient';
 
+// Express-এর Request এক্সটেন্ড করে AuthRequest ইন্টারফেস তৈরি
+export interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    role?: string;
+    email?: string;
+  };
+}
+
+// ==========================================
+// 1. User Registration
+// ==========================================
 export const register = async (req: Request, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
 
-    // ১. সব ফিল্ড আছে কিনা চেক করা (এখানে role অবশ্যই 'MEMBER' অথবা 'ADMIN' হতে হবে)
     if (!name || !email || !password || !role) {
       return res.status(400).json({ message: 'All fields including role are required' });
     }
@@ -19,13 +30,12 @@ export const register = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ২. ডাটাবেসে ইউজার তৈরি (Prisma Schema অনুযায়ী role সেভ হবে)
     const user = await prisma.user.create({
       data: { 
         name, 
         email, 
         password: hashedPassword,
-        role: role // এখানে 'MEMBER' অথবা 'ADMIN' আসবে
+        role: role 
       },
     });
 
@@ -39,6 +49,9 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
+// ==========================================
+// 2. User Login
+// ==========================================
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password, role } = req.body;
@@ -47,11 +60,10 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Email, password and role are required' });
     }
 
-    // ৩. ডাটাবেসে ইমেইল এবং রোল—দুইটাই মিলিয়ে দেখা হচ্ছে
     const user = await prisma.user.findFirst({ 
       where: { 
         email: email,
-        role: role // ইউজার MEMBER হিসেবে লগইন করতে চাইলে ডাটাবেজেও MEMBER থাকতে হবে
+        role: role 
       } 
     });
 
@@ -66,7 +78,7 @@ export const login = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
-    // ৪. টোকেন তৈরি
+    // JWT Token Generation
     const token = jwt.sign(
       { id: user.id, role: user.role },
       process.env.JWT_SECRET as string,
@@ -81,5 +93,81 @@ export const login = async (req: Request, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error during login' });
+  }
+};
+
+// ==========================================
+// 3. Get User Profile
+// ==========================================
+export const getProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { id: true, name: true, email: true, role: true, avatar: true, createdAt: true },
+    });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    res.json({ data: user });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ==========================================
+// 4. Update Profile Info
+// ==========================================
+export const updateProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, avatar } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Name is required' });
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { name, ...(avatar !== undefined ? { avatar } : {}) },
+      select: { id: true, name: true, email: true, role: true, avatar: true },
+    });
+
+    res.json({ message: 'Profile updated successfully', data: updated });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Failed to update profile' });
+  }
+};
+
+// ==========================================
+// 5. Update User Password
+// ==========================================
+export const updatePassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ message: 'Current and new password are required' });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { password: hashedPassword },
+    });
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Failed to update password' });
   }
 };

@@ -13,6 +13,7 @@ model User {
   password  String
   role      Role      @default(MEMBER)
   isActive  Boolean   @default(true)
+  avatar    String?
   createdAt DateTime  @default(now())
   ideas     Idea[]
   payments  Payment[]
